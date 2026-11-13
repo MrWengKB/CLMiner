@@ -115,8 +115,10 @@ const Game = (() => {
       if (state.grid[r][nc].type === 'empty') {
         state.c = nc;
         fall();
-      } else {
-        dig(r, nc);
+      } else if (dig(r, nc) === 'cleared') {
+        // 挖空后立即走进去，脚下为空则继续下落
+        state.c = nc;
+        fall();
       }
     } else if (dir === 'down') {
       if (r + 1 >= ROWS) { toast('已经到达矿山最底层！'); return; }
