@@ -333,6 +333,39 @@ const Game = (() => {
     box.querySelector('#m-quit').addEventListener('click', () => gameOver('你退出了游戏'));
   }
 
+  // 题库格式说明 + 空白模板下载
+  function showFormat() {
+    if (!state || state.over || modalType) return;
+    const box = openModal('format', `
+      <h2>📋 题库格式说明</h2>
+      <p class="left">题库是一个 CSV 文件，<b>每行一道题</b>，共 5 列，用英文逗号 <code>,</code> 分隔：</p>
+      <table class="fmt-table">
+        <tr><th>列</th><th>内容</th></tr>
+        <tr><td><code>题干</code></td><td>题目内容</td></tr><tr><td><code>答案</code></td><td>正确答案</td></tr><tr><td><code>干扰项1</code></td><td>错误选项</td></tr><tr><td><code>干扰项2</code></td><td>错误选项</td></tr><tr><td><code>干扰项3</code></td><td>错误选项</td></tr>
+      </table>
+      <p class="left">示例：</p>
+      <pre class="fmt-example">题干,答案,干扰项1,干扰项2,干扰项3<br>中国的首都是哪座城市？,北京,上海,广州,南京<br>3 × 7 = ?,21,24,18,27</pre>
+      <ul class="fmt-tips"><li>第一行表头可以保留，加载时会自动跳过</li><li>游戏中四个选项会随机打乱顺序</li><li>内容里有逗号时，用英文双引号把整格包起来，如 <code>"1,2,3"</code></li><li>可用 Excel / WPS 编辑，再“另存为 CSV”</li></ul>
+      <div class="modal-actions">
+        <button class="btn" id="m-template">⬇️ 下载空白模板</button>
+        <button class="btn btn-ghost" id="m-close">关闭</button>
+      </div>
+    `);
+    box.querySelector('#m-template').addEventListener('click', () => {
+      // UTF-8 BOM lets Excel open non-ASCII text correctly
+      const blob = new Blob(['\uFEFF' + '题干,答案,干扰项1,干扰项2,干扰项3\r\n'], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'quiz-template.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      toast('已下载空白模板');
+    });
+    box.querySelector('#m-close').addEventListener('click', closeModal);
+  }
+
   function gameOver(reason) {
     if (modalType !== 'death') Sound.play('lose');
     state.over = true;
@@ -355,8 +388,8 @@ const Game = (() => {
 
   // Esc 可关闭商店 / 退出确认
   function escape() {
-    if (modalType === 'shop' || modalType === 'exit') closeModal();
+    if (['shop', 'exit', 'format'].includes(modalType)) closeModal();
   }
 
-  return { init, act, showShop, showExit, toast, escape, newGame };
+  return { init, act, showShop, showExit, showFormat, toast, escape, newGame };
 })();
