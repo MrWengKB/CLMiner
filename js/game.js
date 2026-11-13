@@ -101,6 +101,8 @@ const Game = (() => {
     toastTimer = setTimeout(() => els.toast.classList.remove('show'), 1600);
   }
 
+  function blocked(msg) { toast(msg); Sound.play('bump'); }
+
   /* ---------------- 操作 ---------------- */
   function canAct() { return state && !state.over && !modalType; }
 
@@ -111,8 +113,9 @@ const Game = (() => {
     if (dir === 'left' || dir === 'right') {
       const nc = c + (dir === 'left' ? -1 : 1);
       els.player.classList.toggle('face-left', dir === 'left');
-      if (nc < 0 || nc >= COLS) { toast('前面是坚硬的岩壁'); return; }
+      if (nc < 0 || nc >= COLS) { blocked('前面是坚硬的岩壁'); return; }
       if (state.grid[r][nc].type === 'empty') {
+        Sound.play('step');
         state.c = nc;
         fall();
       } else if (dig(r, nc) === 'cleared') {
@@ -121,12 +124,12 @@ const Game = (() => {
         fall();
       }
     } else if (dir === 'down') {
-      if (r + 1 >= ROWS) { toast('已经到达矿山最底层！'); return; }
+      if (r + 1 >= ROWS) { blocked('已经到达矿山最底层！'); return; }
       if (state.grid[r + 1][c].type === 'empty') fall();
       else if (dig(r + 1, c) === 'cleared') fall();
     } else if (dir === 'up') {
-      if (r - 1 < 0) { toast('上面就是地面了'); return; }
-      if (state.grid[r - 1][c].type === 'empty') { toast('无法跳跃哦'); return; }
+      if (r - 1 < 0) { blocked('上面就是地面了'); return; }
+      if (state.grid[r - 1][c].type === 'empty') { blocked('无法跳跃哦'); return; }
       dig(r - 1, c);
     }
 
@@ -137,7 +140,9 @@ const Game = (() => {
 
   // 掉落：脚下为空就一直往下落
   function fall() {
+    const start = state.r;
     while (state.r + 1 < ROWS && state.grid[state.r + 1][state.c].type === 'empty') state.r++;
+    if (state.r > start) Sound.play('fall');
   }
 
   // 挖矿：返回 'cleared' / 'partial' / null
@@ -153,12 +158,13 @@ const Game = (() => {
 
     if (cell.type === 'yellow') {
       cell.hp--;
-      if (cell.hp > 0) { paintCell(r, c); return 'partial'; }
+      if (cell.hp > 0) { paintCell(r, c); Sound.play('crack'); return 'partial'; }
     }
 
     if (cell.type === 'bomb') {
       state.hearts--;
       state.stats.bomb++;
+      Sound.play('boom');
       floatText(r, c, '💥', null, true);
       els.player.classList.remove('hurt');
       void els.player.offsetWidth;
@@ -168,6 +174,8 @@ const Game = (() => {
       const value = CONFIG.VALUE[cell.type] || 0;
       state.coins += value;
       state.stats[cell.type]++;
+      Sound.play('dig');
+      Sound.play({ blue: 'coin', yellow: 'coin3', purple: 'gem' }[cell.type]);
       const color = { blue: '#bfe0ff', yellow: '#ffe066', purple: '#e8b8ff' }[cell.type];
       floatText(r, c, '+' + value, color);
       if (cell.type === 'purple') toast('💎 发现紫色宝石！+10 金币');
@@ -212,6 +220,7 @@ const Game = (() => {
         if (state.coins < p.price) return;
         state.coins -= p.price;
         state.hearts += p.hearts;
+        Sound.play('buy');
         updateHUD();
         toast(`购买成功：生命 +${p.hearts}`);
         onBought();
@@ -239,6 +248,7 @@ const Game = (() => {
 
   // 生命归零
   function showDeath() {
+    Sound.play('lose');
     const box = openModal('death', `
       <h2>💔 生命值归零</h2>
       <p>你有 🪙 <b>${state.coins}</b> 金币。<br>购买生命值继续挖矿，还是结束游戏？</p>
@@ -252,6 +262,7 @@ const Game = (() => {
   // 答题
   function showQuiz() {
     const q = QuestionBank.next();
+    if (modalType !== 'quiz' && state.shovels <= 0) Sound.play('empty');
     const box = openModal('quiz', `
       <h2>📝 答题换矿铲</h2>
       <p>${state.shovels <= 0 ? '矿铲用完了！' : ''}答对可获得 <b>${CONFIG.QUIZ_REWARD}</b> 把矿铲（当前 ⛏️ ${state.shovels}）</p>
@@ -277,6 +288,7 @@ const Game = (() => {
       if (q.options[i].correct) {
         state.shovels += CONFIG.QUIZ_REWARD;
         state.stats.quizRight++;
+        Sound.play('correct');
         updateHUD();
         fb.className = 'feedback ok';
         fb.textContent = `回答正确！获得 ${CONFIG.QUIZ_REWARD} 把矿铲，现在共 ${state.shovels} 把。`;
@@ -287,6 +299,7 @@ const Game = (() => {
         actions.querySelector('#m-more').addEventListener('click', showQuiz);
       } else {
         optBtns[i].classList.add('wrong');
+        Sound.play('wrong');
         fb.className = 'feedback bad';
         fb.textContent = '答错了，再试一道题吧！';
         actions.innerHTML = `<button class="btn" id="m-next">下一题 ➜</button>`;
@@ -311,6 +324,7 @@ const Game = (() => {
   }
 
   function gameOver(reason) {
+    if (modalType !== 'death') Sound.play('lose');
     state.over = true;
     const s = state.stats;
     const box = openModal('over', `
