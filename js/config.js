@@ -1,8 +1,9 @@
 // 游戏参数（可在此调整）
 const CONFIG = {
-  COLS: 9,            // 每排矿石数
-  ROWS: 30,           // 总排数
-  VISIBLE_ROWS: 5,    // 一屏可见排数
+  COLS: 11,            // 每排矿石数
+  ROWS: 50,           // 总排数
+  VISIBLE_ROWS: 5,
+  START_COL: 0,       // 起始列（0 = 第一行第一个）    // 一屏可见排数
 
   START_HEARTS: 6,
   START_SHOVELS: 10,

@@ -19,6 +19,7 @@ const Game = (() => {
     els.player.querySelector('span').textContent = CONFIG.PLAYER;
     document.documentElement.style.setProperty('--cols', COLS);
     document.documentElement.style.setProperty('--visible', VISIBLE_ROWS);
+    document.getElementById('rows').textContent = ROWS;
 
     const frag = document.createDocumentFragment();
     for (let r = 0; r < ROWS; r++) {
@@ -34,7 +35,7 @@ const Game = (() => {
   }
 
   function newGame() {
-    const startCol = Math.floor(COLS / 2);
+    const startCol = CONFIG.START_COL;
     state = {
       grid: MapGen.generate(ROWS, COLS, startCol),
       r: 0, c: startCol,
@@ -268,9 +269,17 @@ const Game = (() => {
     return { coins, ores, chain };
   }
 
+  // 通关：玩家在最底层，且最底层和上一层都已清空，再也没有可挖的矿
+  function isComplete() {
+    if (state.r !== ROWS - 1) return false;
+    const clear = row => state.grid[row].every(cell => cell.type === 'empty');
+    return clear(ROWS - 1) && clear(ROWS - 2);
+  }
+
   function afterAction() {
     if (state.over) return;
-    if (state.hearts <= 0) showDeath();
+    if (isComplete()) gameOver('你挖空了整座矿山的最底层，没有矿可挖了！', true);
+    else if (state.hearts <= 0) showDeath();
     else if (state.shovels <= 0) showQuiz();
   }
 
@@ -448,12 +457,13 @@ const Game = (() => {
     box.querySelector('#m-close').addEventListener('click', closeModal);
   }
 
-  function gameOver(reason) {
-    if (modalType !== 'death') Sound.play('lose');
+  function gameOver(reason, win = false) {
+    if (win) Sound.play('win');
+    else if (modalType !== 'death') Sound.play('lose');
     state.over = true;
     const s = state.stats;
     const box = openModal('over', `
-      <h2>🏁 游戏结束</h2>
+      <h2>${win ? '🎉 恭喜通关！' : '🏁 游戏结束'}</h2>
       <p>${reason}</p>
       <div class="summary">
         <div>🪙 金币<br><b>${state.coins}</b></div>
