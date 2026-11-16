@@ -49,7 +49,7 @@ const QuestionBank = (() => {
       if (r.length < 5 && r.length === 1 && r[0].includes('，')) r = r[0].split('，');
       r = r.map(s => s.trim());
       if (r.length < 5 || r.slice(0, 5).some(s => s === '')) continue;
-      if (r[0] === '题干') continue; // 跳过表头
+      if (/^(题干|question)$/i.test(r[0])) continue; // 跳过表头（中文或英文）
       result.push(r.slice(0, 5));
     }
     return result;
