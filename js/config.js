@@ -9,9 +9,10 @@ const CONFIG = {
 
   YELLOW_RATE: 0.10,  // 黄矿比例（可相连）
   PURPLE_RATE: 0.03,  // 紫色宝石比例（互不相连）
-  BOMB_RATE: 0.05,    // 炸弹比例
+  BOMB_RATE: 0.05,
+  GAP_RATE: 0.06,     // 随机空白（没有矿石）比例    // 炸弹比例
 
-  VALUE: { blue: 1, yellow: 3, purple: 10 },
+  VALUE: { brown: 1, yellow: 3, purple: 10 },
   YELLOW_HP: 2,       // 黄矿需挖两次
 
   QUIZ_REWARD: 5,     // 答对奖励矿铲
@@ -22,6 +23,6 @@ const CONFIG = {
     { hearts: 10, price: 85 },
   ],
 
-  REVEAL_BOMBS: true,  // true = 炸弹显示为 💣；false = 炸弹伪装成蓝色矿石
+  REVEAL_BOMBS: true,  // true = 炸弹显示为 💣；false = 炸弹伪装成褐色矿石
   PLAYER: '👷',
 };

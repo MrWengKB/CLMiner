@@ -41,7 +41,7 @@ const Game = (() => {
       hearts: CONFIG.START_HEARTS,
       shovels: CONFIG.START_SHOVELS,
       coins: 0,
-      stats: { blue: 0, yellow: 0, purple: 0, bomb: 0, quizRight: 0 },
+      stats: { brown: 0, yellow: 0, purple: 0, bomb: 0, quizRight: 0 },
       over: false,
     };
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) paintCell(r, c);
@@ -56,7 +56,7 @@ const Game = (() => {
     const cell = state.grid[r][c];
     let cls = cell.type;
     if (cell.type === 'yellow' && cell.hp < CONFIG.YELLOW_HP) cls = 'orange';
-    if (cell.type === 'bomb' && !CONFIG.REVEAL_BOMBS) cls = 'blue';
+    if (cell.type === 'bomb' && !CONFIG.REVEAL_BOMBS) cls = 'brown';
     cells[r][c].className = 'cell ' + cls;
   }
 
@@ -105,7 +105,7 @@ const Game = (() => {
   function blocked(msg) { toast(msg); Sound.play('bump'); }
 
   /* ---------------- 操作 ---------------- */
-  function canAct() { return state && !state.over && !modalType; }
+  function canAct() { return state && !state.over && !state.busy && !modalType; }
 
   function act(dir) {
     if (!canAct()) return;
@@ -119,7 +119,7 @@ const Game = (() => {
         Sound.play('step');
         state.c = nc;
         fall();
-      } else if (dig(r, nc) === 'cleared') {
+      } else if (['cleared', 'exploded'].includes(dig(r, nc))) {
         // 挖空后立即走进去，脚下为空则继续下落
         state.c = nc;
         fall();
@@ -127,15 +127,33 @@ const Game = (() => {
     } else if (dir === 'down') {
       if (r + 1 >= ROWS) { blocked('已经到达矿山最底层！'); return; }
       if (state.grid[r + 1][c].type === 'empty') fall();
-      else if (dig(r + 1, c) === 'cleared') fall();
+      else if (['cleared', 'exploded'].includes(dig(r + 1, c))) fall();
     } else if (dir === 'up') {
       if (r - 1 < 0) { blocked('上面就是地面了'); return; }
       if (state.grid[r - 1][c].type === 'empty') { blocked('无法跳跃哦'); return; }
-      dig(r - 1, c);
+      if (dig(r - 1, c) === 'exploded') {
+        // 炸弹在头顶：移到炸弹位置，脚下空了会再落下
+        state.r = r - 1;
+        fall();
+      }
     }
 
-    updatePlayer();
     updateHUD();
+    // 连锁爆炸时，等最后一波炸完再移动人物（期间暂停操作）
+    const delay = state.blastDelay || 0;
+    state.blastDelay = 0;
+    if (delay) {
+      const game = state;
+      state.busy = true;
+      setTimeout(() => {
+        if (state !== game) return;
+        state.busy = false;
+        updatePlayer();
+        afterAction();
+      }, delay);
+      return;
+    }
+    updatePlayer();
     afterAction();
   }
 
@@ -146,7 +164,7 @@ const Game = (() => {
     if (state.r > start) Sound.play('fall');
   }
 
-  // 挖矿：返回 'cleared' / 'partial' / null
+  // 挖矿：返回 'cleared' / 'partial' / 'exploded' / null
   function dig(r, c) {
     if (state.shovels <= 0) { showQuiz(); return null; }
     const cell = state.grid[r][c];
@@ -170,20 +188,84 @@ const Game = (() => {
       els.player.classList.remove('hurt');
       void els.player.offsetWidth;
       els.player.classList.add('hurt');
-      toast('💣 挖到炸弹！生命 -1');
+      state.grid[r][c] = { type: 'empty', hp: 0 };
+      paintCell(r, c);
+      const res = explode(r, c);
+      toast(`💣 挖到炸弹！生命 -1 · 炸出 ${res.ores} 块矿石 +${res.coins} 金币` + (res.chain ? ` · 连锁引爆 ${res.chain} 颗炸弹` : ''));
+      return 'exploded';
     } else {
       const value = CONFIG.VALUE[cell.type] || 0;
       state.coins += value;
       state.stats[cell.type]++;
       Sound.play('dig');
-      Sound.play({ blue: 'coin', yellow: 'coin3', purple: 'gem' }[cell.type]);
-      const color = { blue: '#bfe0ff', yellow: '#ffe066', purple: '#e8b8ff' }[cell.type];
+      Sound.play({ brown: 'coin', yellow: 'coin3', purple: 'gem' }[cell.type]);
+      const color = { brown: '#f0d2ad', yellow: '#ffe066', purple: '#e8b8ff' }[cell.type];
       floatText(r, c, '+' + value, color);
       if (cell.type === 'purple') toast('💎 发现紫色宝石！+10 金币');
     }
     state.grid[r][c] = { type: 'empty', hp: 0 };
     paintCell(r, c);
     return 'cleared';
+  }
+
+  // 爆炸：清除周围 8 格并获得金币；相邻炸弹连锁引爆（效果相同，不额外扣血）
+  const BLAST_STEP_MS = 250;
+  const ORE_COLOR = { brown: '#f0d2ad', yellow: '#ffe066', purple: '#e8b8ff' };
+
+  function explode(r0, c0) {
+    const queue = [[r0, c0, 0]];
+    const game = state;
+    let coins = 0, ores = 0, chain = 0, maxDepth = 0;
+    const later = (depth, fn) => {
+      if (!depth) fn();
+      else setTimeout(() => { if (state === game) fn(); }, depth * BLAST_STEP_MS);
+    };
+
+    while (queue.length) {
+      const [r, c, depth] = queue.shift();
+      maxDepth = Math.max(maxDepth, depth);
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          const nr = r + dr, nc = c + dc;
+          if ((!dr && !dc) || nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
+          const cell = state.grid[nr][nc];
+          let label = null, color = null;
+          if (cell.type === 'bomb') {
+            chain++;
+            state.stats.bomb++;
+            queue.push([nr, nc, depth + 1]);
+          } else if (cell.type !== 'empty') {
+            const v = CONFIG.VALUE[cell.type] || 0;
+            coins += v;
+            ores++;
+            state.stats[cell.type]++;
+            label = '+' + v;
+            color = ORE_COLOR[cell.type];
+          }
+          // 状态立即更新；画面按连锁层级依次播放
+          if (cell.type !== 'empty') state.grid[nr][nc] = { type: 'empty', hp: 0 };
+          later(depth, () => {
+            paintCell(nr, nc);
+            const el = cells[nr][nc];
+            el.classList.remove('blast');
+            void el.offsetWidth;
+            el.classList.add('blast');
+            if (label) floatText(nr, nc, label, color);
+          });
+        }
+      }
+      later(depth, () => {
+        if (depth) { Sound.play('boom'); floatText(r, c, '💥', null, true); }
+        els.viewport.classList.remove('shake');
+        void els.viewport.offsetWidth;
+        els.viewport.classList.add('shake');
+      });
+    }
+
+    state.coins += coins;
+    state.blastDelay = maxDepth * BLAST_STEP_MS;
+    if (ores) setTimeout(() => Sound.play('coin3'), 150);
+    return { coins, ores, chain };
   }
 
   function afterAction() {
@@ -376,7 +458,7 @@ const Game = (() => {
       <div class="summary">
         <div>🪙 金币<br><b>${state.coins}</b></div>
         <div>⬇️ 深度<br><b>${state.r + 1} / ${ROWS}</b></div>
-        <div>🟦 蓝矿<br><b>${s.blue}</b></div>
+        <div>🟫 褐矿<br><b>${s.brown}</b></div>
         <div>🟨 黄矿<br><b>${s.yellow}</b></div>
         <div>💎 宝石<br><b>${s.purple}</b></div>
         <div>💣 炸弹<br><b>${s.bomb}</b></div>
