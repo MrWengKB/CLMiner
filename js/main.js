@@ -9,6 +9,7 @@
     W: 'up', S: 'down', A: 'left', D: 'right',
   };
   document.addEventListener('keydown', e => {
+    if (e.target.closest && e.target.closest('input, textarea')) return; // 输入框里打字时不操作游戏
     if (e.key === 'Escape') { Game.escape(); return; }
     if (e.key === 'm' || e.key === 'M') { toggleSound(); return; }
     const dir = KEYMAP[e.key];
@@ -37,6 +38,7 @@
 
   document.getElementById('btn-format').addEventListener('click', Game.showFormat);
   document.getElementById('btn-shop').addEventListener('click', Game.showShop);
+  document.getElementById('btn-publish').addEventListener('click', Game.showPublish);
   document.getElementById('btn-exit').addEventListener('click', Game.showExit);
 
   // 加载题库
@@ -51,11 +53,26 @@
     Game.toast(n ? `✅ 已加载题库「${file.name}」，共 ${n} 题` : '❌ 未识别到题目，请检查 CSV 格式');
   });
 
+  // 作业链接：使用链接里的题目（或默认题库），隐藏换题库、发布作业按钮（学生不能换题）
+  const hw = Homework.fromLocation();
+  const banner = document.getElementById('hw-banner');
+  const showBanner = () => { banner.textContent = `📘 作业：${hw.title}（${QuestionBank.count} 题）`; };
+  if (hw && !hw.error) {
+    document.body.classList.add('hw-mode');
+    document.title = `${hw.title} · ${document.title}`;
+    banner.hidden = false;
+    if (hw.questions) QuestionBank.setRows(hw.questions, hw.title);
+    showBanner();
+  } else if (hw && hw.error) {
+    Game.toast(hw.message);
+  }
+
   // 若通过本地服务器打开，自动尝试加载同目录 questions.csv；否则使用内置题库
-  if (location.protocol.startsWith('http')) {
+  if (!(hw && hw.questions) && location.protocol.startsWith('http')) {
     fetch('questions.csv')
       .then(r => (r.ok ? r.arrayBuffer() : Promise.reject()))
       .then(buf => QuestionBank.load(QuestionBank.decode(buf), 'questions.csv'))
+      .then(() => { if (hw && !hw.error) showBanner(); })
       .catch(() => {});
   }
 })();
