@@ -19,7 +19,8 @@ const QuestionBank = (() => {
   ];
 
   let questions = BUILTIN.slice();
-  let source = '内置';
+  const BUILTIN_NAME = '内置';
+  let source = BUILTIN_NAME;
   let queue = [];
   let last = null;
 
@@ -65,6 +66,16 @@ const QuestionBank = (() => {
     return parsed.length;
   }
 
+  // 直接设置题目（作业链接用）
+  function setRows(rows, name) {
+    if (!rows.length) return 0;
+    questions = rows.map(r => r.slice(0, 5));
+    source = name;
+    queue = [];
+    last = null;
+    return questions.length;
+  }
+
   // 自动识别 UTF-8 / GBK（Excel 中文另存为 CSV 常见 GBK）
   function decode(buffer) {
     try {
@@ -89,8 +100,11 @@ const QuestionBank = (() => {
   }
 
   return {
-    load, decode, next, parseCSV,
+    load, setRows, decode, next, parseCSV,
     get count() { return questions.length; },
+    get rows() { return questions.map(r => r.slice()); },
+    // 还是游戏自带的题库（内置或 questions.csv），没有导入别的
+    get isDefault() { return source === BUILTIN_NAME || source === 'questions.csv'; },
     get source() { return source; },
   };
 })();
